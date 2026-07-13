@@ -1,0 +1,34 @@
+name: Refresh content
+
+on:
+  schedule:
+    # ~4x/day, spread around Pacific Time: 6am, 11am, 3pm, 7pm PT (13/18/22/02 UTC)
+    - cron: "0 13 * * *"
+    - cron: "0 18 * * *"
+    - cron: "0 22 * * *"
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build data.json (stdlib only, no installs)
+        run: python3 scripts/build.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "raiders-daily-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/data.json
+          if git diff --cached --quiet; then
+            echo "No content changes."
+          else
+            git commit -m "Refresh content $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
