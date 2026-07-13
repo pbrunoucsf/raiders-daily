@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Raiders Daily</title>
+  <meta name="description" content="All your Las Vegas Raiders news, podcasts, videos, and scores in one place. Updated automatically all day.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Raiders Daily">
+  <meta name="theme-color" content="#0b0b0d">
+</head>
+<body>
+  <header class="site-header">
+    <div class="masthead">
+      <img src="icons/icon-192.png" alt="" class="logo">
+      <div class="masthead-text">
+        <h1>Raiders Daily</h1>
+        <p id="updated-stamp" class="updated">Loading…</p>
+      </div>
+      <button id="font-toggle" class="font-toggle" title="Make text bigger or smaller" aria-label="Toggle larger text">A<span class="plus">A</span></button>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab" data-tab="news">News</button>
+      <button class="tab" data-tab="podcasts">Podcasts</button>
+      <button class="tab" data-tab="videos">Videos</button>
+      <button class="tab" data-tab="reddit">Fans</button>
+      <button class="tab" data-tab="team">Team</button>
+    </nav>
+  </header>
+
+  <main id="content">
+    <p class="loading-msg">Loading the latest Raiders content…</p>
+  </main>
+
+  <footer class="site-footer">
+    <p>Content refreshes automatically several times a day. Tap any headline to read the full story at its source.</p>
+    <p class="fine">Raiders Daily is an unofficial fan aggregator, not affiliated with the Las Vegas Raiders or the NFL.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

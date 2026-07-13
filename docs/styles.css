@@ -1,0 +1,150 @@
+/* Raiders Daily — silver & black, senior-friendly */
+:root {
+  --bg: #0b0b0d;
+  --panel: #16181b;
+  --panel-2: #1e2125;
+  --border: #33373c;
+  --silver: #a5acaf;
+  --text: #e6e8ea;
+  --text-dim: #b9bec2;
+  --accent: #cfd4d7;
+  --font-scale: 1;
+}
+html.large { --font-scale: 1.22; }
+
+* { box-sizing: border-box; }
+html { font-size: calc(19px * var(--font-scale)); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+a { color: inherit; }
+
+/* Header */
+.site-header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(11,11,13,.97);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top);
+}
+.masthead {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .6rem .9rem .4rem;
+  max-width: 60rem; margin: 0 auto;
+}
+.logo { width: 2.4rem; height: 2.4rem; border-radius: .55rem; }
+.masthead-text { flex: 1; min-width: 0; }
+.masthead h1 {
+  margin: 0; font-size: 1.25rem; letter-spacing: .04em;
+  color: var(--accent); font-weight: 800; text-transform: uppercase;
+}
+.updated { margin: 0; font-size: .72rem; color: var(--text-dim); }
+.font-toggle {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: .6rem;
+  min-width: 3rem; min-height: 3rem; cursor: pointer;
+  font-size: .85rem; font-weight: 700;
+}
+.font-toggle .plus { font-size: 1.15rem; }
+.font-toggle:active { background: var(--panel-2); }
+
+/* Tabs */
+.tabs {
+  display: flex; gap: .35rem; overflow-x: auto;
+  padding: .35rem .9rem .55rem;
+  max-width: 60rem; margin: 0 auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 0 0 auto;
+  background: var(--panel); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 2rem;
+  padding: .5rem 1.05rem; min-height: 2.8rem;
+  font-size: .9rem; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.tab.active { background: var(--silver); color: #0b0b0d; border-color: var(--silver); }
+
+/* Layout */
+main { max-width: 60rem; margin: 0 auto; padding: .9rem .9rem 2rem; }
+.loading-msg { color: var(--text-dim); text-align: center; padding: 3rem 0; }
+.section-title {
+  font-size: .85rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--silver); margin: 1.4rem 0 .6rem; font-weight: 800;
+}
+.section-title:first-child { margin-top: .2rem; }
+
+/* Cards */
+.card {
+  display: block;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: .85rem; padding: .85rem 1rem; margin-bottom: .6rem;
+  text-decoration: none;
+}
+a.card:active, a.card:hover { background: var(--panel-2); }
+.card .meta {
+  font-size: .74rem; color: var(--text-dim); margin-bottom: .2rem;
+  display: flex; gap: .5rem; flex-wrap: wrap; align-items: baseline;
+}
+.card .meta .source { color: var(--silver); font-weight: 700; }
+.card h3 { margin: 0; font-size: 1.02rem; font-weight: 700; line-height: 1.35; }
+.card p.summary { margin: .35rem 0 0; font-size: .88rem; color: var(--text-dim); }
+
+/* Podcasts */
+.card audio { width: 100%; margin-top: .6rem; height: 2.4rem; }
+.pod-links { margin-top: .4rem; font-size: .8rem; }
+.pod-links a { color: var(--silver); }
+
+/* Videos */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .7rem; }
+.video-card { padding: 0; overflow: hidden; }
+.video-card img { width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover; }
+.video-card .video-body { padding: .6rem .8rem .8rem; }
+
+/* Game banner */
+.game-banner {
+  background: linear-gradient(135deg, #23262a, #101214);
+  border: 1px solid var(--silver);
+  border-radius: 1rem; padding: 1rem 1.1rem; margin-bottom: 1rem;
+}
+.game-banner .label {
+  font-size: .74rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--silver); font-weight: 800;
+}
+.game-banner .matchup { font-size: 1.2rem; font-weight: 800; margin: .15rem 0; }
+.game-banner .when { color: var(--text-dim); font-size: .9rem; }
+
+/* Team tab */
+.team-summary { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+.team-summary img { width: 4rem; height: 4rem; }
+.team-summary .line { font-size: 1.05rem; font-weight: 700; }
+.team-summary .sub { color: var(--text-dim); font-size: .88rem; }
+table.schedule { width: 100%; border-collapse: collapse; font-size: .92rem; }
+table.schedule td {
+  padding: .55rem .4rem; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.schedule td.date { color: var(--text-dim); white-space: nowrap; width: 6.5rem; }
+table.schedule td.result { text-align: right; white-space: nowrap; font-weight: 700; }
+.result .win { color: #7ed492; }
+.result .loss { color: #e58a8a; }
+
+.error-note { color: var(--text-dim); font-style: italic; padding: .6rem 0; }
+
+/* Footer */
+.site-footer {
+  max-width: 60rem; margin: 0 auto; padding: 1rem .9rem 3rem;
+  color: var(--text-dim); font-size: .82rem;
+  border-top: 1px solid var(--border);
+}
+.site-footer .fine { font-size: .7rem; opacity: .7; }
+
+@media (min-width: 700px) {
+  .masthead h1 { font-size: 1.5rem; }
+  .card h3 { font-size: 1.08rem; }
+}
