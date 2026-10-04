@@ -1,0 +1,60 @@
+name: Ticket price email
+
+on:
+  schedule:
+    # Every morning: 8am PDT / 7am PST (15:00 UTC). GitHub may start it a little late.
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: "Send the email (uncheck for a dry run that only checks prices and Gmail login)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stop for good after game day (Nov 8, 2026)
+        id: done
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(TZ=America/Los_Angeles date +%Y%m%d)" -gt 20261108 ]; then
+            echo "Game is over; disabling this workflow."
+            gh workflow disable tickets.yml --repo "$GITHUB_REPOSITORY"
+            echo "over=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check prices and email (stdlib only, no installs)
+        if: steps.done.outputs.over != 'true'
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_email }}" != "true" ]; then
+            python3 scripts/tickets.py --dry-run
+          else
+            python3 scripts/tickets.py
+          fi
+
+      - name: Save price history
+        if: steps.done.outputs.over != 'true'
+        run: |
+          git config user.name "raiders-daily-bot"
+          git config user.email "actions@users.noreply.github.com"
+          [ -f tickets/history.json ] && git add tickets/history.json
+          if git diff --cached --quiet; then
+            echo "No history changes."
+          else
+            git commit -m "Ticket prices $(date -u +'%Y-%m-%d')"
+            git pull --rebase
+            git push
+          fi
