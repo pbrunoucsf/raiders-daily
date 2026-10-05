@@ -2,14 +2,22 @@ name: Ticket price email
 
 on:
   schedule:
-    # Every morning: 8am PDT / 7am PST (15:00 UTC). GitHub may start it a little late.
-    - cron: "0 15 * * *"
+    # GitHub's scheduler often delays or drops runs (worst at the top of the hour),
+    # so there are backup slots. The script sends at most one email per day.
+    # Times in PDT (subtract 1 hour after Nov 1): 7:23, 8:53, 10:23, 12:53.
+    - cron: "23 14 * * *"
+    - cron: "53 15 * * *"
+    - cron: "23 17 * * *"
+    - cron: "53 19 * * *"
   workflow_dispatch:
     inputs:
       send_email:
         description: "Send the email (uncheck for a dry run that only checks prices and Gmail login)"
         type: boolean
         default: true
+
+concurrency:
+  group: ticket-email
 
 permissions:
   contents: write
@@ -41,6 +49,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_email }}" != "true" ]; then
             python3 scripts/tickets.py --dry-run
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            python3 scripts/tickets.py --once-per-day
           else
             python3 scripts/tickets.py
           fi

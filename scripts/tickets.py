@@ -13,6 +13,8 @@ Stdlib only. Config comes from environment variables (GitHub secrets):
   EMAIL_TO            comma-separated recipients
 
 Run with --dry-run to skip email and write the message to tickets/preview.html.
+Run with --once-per-day (scheduled runs) to exit quietly if today's email
+already went out, so backup schedule slots never send duplicates.
 """
 
 import json
@@ -136,17 +138,33 @@ def save_history(history, today, summary):
     def best(key):
         return summary[key][0]["price"] if summary[key] else None
 
+    old = next((h for h in history if h["date"] == today.isoformat()), {})
     history = [h for h in history if h["date"] != today.isoformat()]
     history.append({
+        **old,
         "date": today.isoformat(),
         "overall": best("overall"),
         "top_deck_50": best("top_deck_50"),
         "level300_50": best("level300_50"),
         "listings": summary["count"],
     })
+    write_history(history)
+    return history
+
+
+def write_history(history):
     HISTORY.parent.mkdir(exist_ok=True)
     HISTORY.write_text(json.dumps(history, indent=1) + "\n")
-    return history
+
+
+def mark_emailed(today):
+    history = load_history()
+    entry = next((h for h in history if h["date"] == today.isoformat()), None)
+    if entry is None:
+        entry = {"date": today.isoformat()}
+        history.append(entry)
+    entry["emailed"] = True
+    write_history(history)
 
 
 def money(v):
@@ -263,6 +281,10 @@ def main():
     if today > GAME_DAY:
         print("Game is over; nothing to send.")
         return
+    if "--once-per-day" in sys.argv and any(
+            h["date"] == today.isoformat() and h.get("emailed") for h in load_history()):
+        print("Today's email already went out; nothing to do.")
+        return
 
     event = find_event()
     event_url = event.get("seo_url") or FALLBACK_EVENT_URL
@@ -290,6 +312,7 @@ def main():
             check_login()
     else:
         send(subject, text, html)
+        mark_emailed(today)
 
 
 if __name__ == "__main__":
