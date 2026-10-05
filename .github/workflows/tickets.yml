@@ -4,11 +4,11 @@ on:
   schedule:
     # GitHub's scheduler often delays or drops runs (worst at the top of the hour),
     # so there are backup slots. The script sends at most one email per day.
-    # Times in PDT (subtract 1 hour after Nov 1): 7:23, 8:53, 10:23, 12:53.
-    - cron: "23 14 * * *"
-    - cron: "53 15 * * *"
+    # Times in PDT (subtract 1 hour after Nov 1): 10:23am, 11:53am, 1:23pm, 2:53pm.
     - cron: "23 17 * * *"
-    - cron: "53 19 * * *"
+    - cron: "53 18 * * *"
+    - cron: "23 20 * * *"
+    - cron: "53 21 * * *"
   workflow_dispatch:
     inputs:
       send_email:
