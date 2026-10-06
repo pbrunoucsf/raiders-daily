@@ -12,5 +12,13 @@
   "top_deck_50": 520.0,
   "level300_50": 764.0,
   "listings": 426
+ },
+ {
+  "date": "2026-10-05",
+  "overall": 418.0,
+  "top_deck_50": 531.0,
+  "level300_50": 764.0,
+  "listings": 423,
+  "emailed": true
  }
 ]
