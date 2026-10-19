@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Daily ticket-price email for Raiders at 49ers, Levi's Stadium, Sun Nov 8 2026.
+"""Daily ticket-price email for the Raiders games listed in GAMES.
 
-Reads Gametime's public listings feed (all-in prices, fees included), picks
-  * the cheapest seats overall, and
-  * the cheapest top-deck (400 level) seats near the 50-yard line,
-  * plus the 300-level tier just below it, near the 50,
-for buying TICKET_QTY seats together, then emails the summary.
+For each game still ahead, reads Gametime's public listings feed (all-in
+prices, fees included) and picks the cheapest seats overall plus the cheapest
+seats in each named area (e.g. top deck near the 50) for buying TICKET_QTY
+seats together, then emails one combined summary.
 
 Stdlib only. Config comes from environment variables (GitHub secrets):
   GMAIL_ADDRESS       sending Gmail account
@@ -25,7 +24,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,33 +34,69 @@ HISTORY = ROOT / "tickets" / "history.json"
 PREVIEW = ROOT / "tickets" / "preview.html"
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
-GAME_DAY = date(2026, 11, 8)
-FALLBACK_EVENT_ID = "698f3d2f6316f44ee4d68894"
-FALLBACK_EVENT_URL = ("https://gametime.co/nfl-football/raiders-at-49-ers-tickets/"
-                      "11-8-2026-santa-clara-ca-levis-stadium/events/698f3d2f6316f44ee4d68894")
-SEARCH_QUERY = "raiders 49ers"
 TICKET_QTY = 2
-
-# Levi's Stadium: the 300 and 400 levels share the east sideline (opposite the
-# suite tower). Sideline sections run 406-417 and 309-320; the 50-yard line falls
-# between 411/412 and 314/315. Four sections each side ~ between the 30s.
-TOP_DECK_MIDFIELD = {"410", "411", "412", "413"}
-LEVEL_300_MIDFIELD = {"313", "314", "315", "316"}
 TOP_N = 3
+
+
+def search_links(q):
+    q = urllib.parse.quote(q)
+    return [
+        ("TickPick (no fees)", f"https://www.tickpick.com/search?q={q}"),
+        ("Ticketmaster / NFL Ticket Exchange", f"https://www.ticketmaster.com/search?q={q}"),
+        ("StubHub", f"https://www.stubhub.com/secure/search?q={q}"),
+        ("SeatGeek", f"https://seatgeek.com/search?search={q}"),
+        ("Vivid Seats", f"https://www.vividseats.com/search?searchTerm={q}"),
+    ]
+
+
+# Areas: (history key, heading, set of section names). Section names match
+# Gametime's listing "section" field.
+GAMES = [
+    {
+        "key": "lv",
+        "title": "Rams @ Raiders",
+        "day": date(2026, 10, 25),
+        "when_where": "Sun Oct 25, 2026 · 1:25 PM PT · Allegiant Stadium, Las Vegas",
+        "search": "rams raiders",
+        "match": ("Rams", "Raiders"),
+        "event_id": "695d72d1f3e001f3f409f235",
+        "event_url": ("https://gametime.co/nfl-football/rams-at-raiders-tickets/"
+                      "10-25-2026-las-vegas-nv-allegiant-stadium/events/695d72d1f3e001f3f409f235"),
+        # Allegiant: the 400s are the top deck on both sidelines; the 50 falls at
+        # 412 and 438. Five sections each side ~ between the 30s.
+        "areas": [
+            ("top_deck_50", "Top deck near the 50 (sections 410-414 and 436-440)",
+             {"410", "411", "412", "413", "414", "436", "437", "438", "439", "440"}),
+        ],
+        "links": search_links("rams raiders"),
+    },
+    {
+        "key": "sf",
+        "title": "Raiders @ 49ers",
+        "day": date(2026, 11, 8),
+        "when_where": "Sun Nov 8, 2026 · 1:05 PM PT · Levi's Stadium, Santa Clara",
+        "search": "raiders 49ers",
+        "match": ("Raiders", "49ers"),
+        "event_id": "698f3d2f6316f44ee4d68894",
+        "event_url": ("https://gametime.co/nfl-football/raiders-at-49-ers-tickets/"
+                      "11-8-2026-santa-clara-ca-levis-stadium/events/698f3d2f6316f44ee4d68894"),
+        # Levi's: the 300 and 400 levels share the east sideline (opposite the
+        # suite tower). Sideline sections run 406-417 and 309-320; the 50 falls
+        # between 411/412 and 314/315. Four sections each ~ between the 30s.
+        "areas": [
+            ("top_deck_50", "Top deck near the 50 (sections 410-413)", {"410", "411", "412", "413"}),
+            ("level300_50", "300 level near the 50 (313-316, just below the top deck)",
+             {"313", "314", "315", "316"}),
+        ],
+        "links": [("TickPick (no fees)", "https://www.tickpick.com/buy-san-francisco-49ers-vs-las-vegas-raiders-tickets-levis-stadium-11-8-26-1pm/7730388/")]
+                 + search_links("raiders 49ers")[1:],
+    },
+]
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 )
-
-COMPARE_LINKS = [
-    ("TickPick (no fees)", "https://www.tickpick.com/buy-san-francisco-49ers-vs-las-vegas-raiders-tickets-levis-stadium-11-8-26-1pm/7730388/"),
-    ("Ticketmaster / NFL Ticket Exchange", "https://www.ticketmaster.com/search?q=raiders%2049ers"),
-    ("StubHub", "https://www.stubhub.com/secure/search?q=raiders%2049ers"),
-    ("SeatGeek", "https://seatgeek.com/search?search=raiders%2049ers"),
-    ("Vivid Seats", "https://www.vividseats.com/search?searchTerm=raiders%2049ers"),
-]
-
 
 def fetch_json(url, attempts=4):
     """GET JSON, backing off on rate limits / transient errors."""
@@ -79,17 +114,19 @@ def fetch_json(url, attempts=4):
             delay *= 2
 
 
-def find_event():
+def find_event(game):
     """Locate the game in Gametime search; fall back to the known event id."""
-    url = "https://mobile.gametime.co/v1/search?q=" + urllib.parse.quote(SEARCH_QUERY)
+    url = "https://mobile.gametime.co/v1/search?q=" + urllib.parse.quote(game["search"])
     try:
         for item in fetch_json(url, attempts=2).get("events", []):
             ev = item.get("event", {})
-            if ev.get("datetime_local", "").startswith(GAME_DAY.isoformat()) and "49ers" in ev.get("name", ""):
-                return ev
+            name = ev.get("name", "")
+            if (ev.get("datetime_local", "").startswith(game["day"].isoformat())
+                    and all(t in name for t in game["match"]) and "Parking" not in name):
+                return ev["id"], ev.get("seo_url") or game["event_url"]
     except Exception as err:  # search is a nicety; listings are what matter
         print(f"search failed, using fallback event id: {err}", file=sys.stderr)
-    return {"id": FALLBACK_EVENT_ID, "seo_url": None}
+    return game["event_id"], game["event_url"]
 
 
 def get_listings(event_id):
@@ -111,15 +148,13 @@ def get_listings(event_id):
     return out
 
 
-def summarize(listings):
+def summarize(game, listings):
     """Cheapest TICKET_QTY-together listings per area, plus the cheapest listing
     of any quantity in that area (shown when no pair is available)."""
     seated = [x for x in listings if x["group"] != "Standing Room Only"]
-    areas = {
-        "overall": seated,
-        "top_deck_50": [x for x in seated if x["section"] in TOP_DECK_MIDFIELD],
-        "level300_50": [x for x in seated if x["section"] in LEVEL_300_MIDFIELD],
-    }
+    areas = {"overall": seated}
+    for key, _, sections in game["areas"]:
+        areas[key] = [x for x in seated if x["section"] in sections]
     summary = {"count": len(seated), "any_qty": {}}
     for key, rows in areas.items():
         summary[key] = [x for x in rows if TICKET_QTY in x["lots"]][:TOP_N]
@@ -128,28 +163,29 @@ def summarize(listings):
 
 
 def load_history():
+    """One entry per day: {"date", "emailed", <game key>: {area key: best price}}."""
     try:
-        return json.loads(HISTORY.read_text())
+        history = json.loads(HISTORY.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         return []
-
-
-def save_history(history, today, summary):
-    def best(key):
-        return summary[key][0]["price"] if summary[key] else None
-
-    old = next((h for h in history if h["date"] == today.isoformat()), {})
-    history = [h for h in history if h["date"] != today.isoformat()]
-    history.append({
-        **old,
-        "date": today.isoformat(),
-        "overall": best("overall"),
-        "top_deck_50": best("top_deck_50"),
-        "level300_50": best("level300_50"),
-        "listings": summary["count"],
-    })
-    write_history(history)
+    for h in history:  # entries from before multi-game support were Levi's only
+        if "overall" in h:
+            h["sf"] = {k: h.pop(k) for k in ("overall", "top_deck_50", "level300_50", "listings") if k in h}
     return history
+
+
+def today_entry(history, today):
+    entry = next((h for h in history if h["date"] == today.isoformat()), None)
+    if entry is None:
+        entry = {"date": today.isoformat()}
+        history.append(entry)
+    return entry
+
+
+def record(history, today, game, summary):
+    prices = {key: (rows[0]["price"] if rows else None)
+              for key, rows in summary.items() if key not in ("count", "any_qty")}
+    today_entry(history, today)[game["key"]] = {**prices, "listings": summary["count"]}
 
 
 def write_history(history):
@@ -157,27 +193,19 @@ def write_history(history):
     HISTORY.write_text(json.dumps(history, indent=1) + "\n")
 
 
-def mark_emailed(today):
-    history = load_history()
-    entry = next((h for h in history if h["date"] == today.isoformat()), None)
-    if entry is None:
-        entry = {"date": today.isoformat()}
-        history.append(entry)
-    entry["emailed"] = True
-    write_history(history)
-
-
 def money(v):
     return f"${v:,.0f}"
 
 
-def change_note(history, key, today):
-    prev = [h for h in history if h["date"] < today.isoformat() and h.get(key)]
-    now = next((h.get(key) for h in history if h["date"] == today.isoformat()), None)
+def change_note(history, game_key, key, today):
+    series = [(h["date"], h.get(game_key, {}).get(key)) for h in history]
+    series = [(d, v) for d, v in series if v]
+    prev = [v for d, v in series if d < today.isoformat()]
+    now = next((v for d, v in series if d == today.isoformat()), None)
     if not prev or now is None:
         return ""
-    diff = now - prev[-1][key]
-    low = min(h[key] for h in history if h.get(key))
+    diff = now - prev[-1]
+    low = min(v for _, v in series)
     note = "no change since yesterday" if abs(diff) < 1 else (
         f"{'down' if diff < 0 else 'up'} {money(abs(diff))} since last check")
     if now <= low:
@@ -185,36 +213,27 @@ def change_note(history, key, today):
     return note
 
 
-def render(event_url, summary, history, today, error=None):
-    days = (GAME_DAY - today).days
-    title = f"Raiders @ 49ers tickets: {days} day{'s' if days != 1 else ''} to go"
-
-    sections = [
-        ("Cheapest seats overall", "overall"),
-        ("Top deck near the 50 (sections 410-413)", "top_deck_50"),
-        ("300 level near the 50 (313-316, just below the top deck)", "level300_50"),
-    ]
-
-    text = [title, "Sun Nov 8, 2026, 1:05 PM PT · Levi's Stadium, Santa Clara", ""]
-    html = [
-        "<div style='font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;color:#111'>",
-        f"<h2 style='margin:0 0 4px'>{title}</h2>",
-        "<p style='margin:0 0 16px;color:#555'>Sun Nov 8, 2026 · 1:05 PM PT · Levi's Stadium, Santa Clara</p>",
+def render_game(game, summary, history, today, error, text, html):
+    days = (game["day"] - today).days
+    countdown = "today!" if days == 0 else f"{days} day{'s' if days != 1 else ''} to go"
+    text += ["", "=" * 50, f"{game['title'].upper()}: {countdown}", game["when_where"]]
+    html += [
+        "<div style='border-top:3px solid #111;margin-top:24px;padding-top:12px'>",
+        f"<h2 style='margin:0 0 4px'>{game['title']} <span style='font-weight:normal;color:#555;font-size:16px'>"
+        f"· {countdown}</span></h2>",
+        f"<p style='margin:0 0 8px;color:#555'>{game['when_where']}</p>",
     ]
 
     if error:
-        text += [f"Couldn't pull prices today ({error}). Will try again tomorrow.", ""]
+        text.append(f"Couldn't pull prices today ({error}). Will try again tomorrow.")
         html.append(f"<p><b>Couldn't pull prices today</b> ({error}). Will try again tomorrow. "
                     "Links below still work for checking by hand.</p>")
     else:
-        text.append(f"Prices are per ticket for {TICKET_QTY} seats together, all fees included (Gametime).")
-        html.append(f"<p style='color:#555'>Per-ticket price for <b>{TICKET_QTY} seats together</b>, "
-                    "all fees included (Gametime).</p>")
-        for heading, key in sections:
+        for key, heading in [("overall", "Cheapest seats overall")] + [(k, h) for k, h, _ in game["areas"]]:
             rows = summary[key]
-            note = change_note(history, key, today)
+            note = change_note(history, game["key"], key, today)
             text += ["", heading.upper() + (f"  ({note})" if note else "")]
-            html.append(f"<h3 style='margin:20px 0 6px'>{heading}</h3>")
+            html.append(f"<h3 style='margin:16px 0 6px'>{heading}</h3>")
             if note:
                 html.append(f"<div style='color:#666;font-size:13px;margin-bottom:6px'>{note}</div>")
             if not rows:
@@ -238,13 +257,33 @@ def render(event_url, summary, history, today, error=None):
                     % (weight, "18px" if i == 0 else "15px", money(r["price"]), r["section"], r["row"], view))
             html.append("</table>")
 
-    links = [("Gametime (source of these prices)", event_url)] + COMPARE_LINKS
+    links = [("Gametime (source of these prices)", game["url"])] + game["links"]
     text += ["", "Buy / compare:"] + [f"  {n}: {u}" for n, u in links]
-    html.append("<h3 style='margin:24px 0 6px'>Buy / compare</h3><ul style='padding-left:18px'>")
-    html += [f"<li><a href='{u}'>{n}</a></li>" for n, u in links]
-    html.append("</ul><p style='color:#888;font-size:12px'>Sent automatically every morning until game day. "
-                "Other sites may show different prices; TickPick lists without fees.</p></div>")
-    return title, "\n".join(text), "\n".join(html)
+    html.append("<p style='margin:16px 0 4px'><b>Buy / compare:</b> "
+                + " · ".join(f"<a href='{u}'>{n}</a>" for n, u in links) + "</p></div>")
+
+
+def render(results, history, today):
+    title = "Raiders ticket watch"
+    text = [title, f"Prices are per ticket for {TICKET_QTY} seats together, all fees included (Gametime)."]
+    html = [
+        "<div style='font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;color:#111'>",
+        f"<p style='color:#555;margin:0'>Per-ticket price for <b>{TICKET_QTY} seats together</b>, "
+        "all fees included (Gametime).</p>",
+    ]
+    for game, summary, error in results:
+        render_game(game, summary, history, today, error, text, html)
+    html.append("<p style='color:#888;font-size:12px;margin-top:24px'>Sent automatically every morning until "
+                "game day. Other sites may show different prices; TickPick lists without fees.</p></div>")
+
+    bits = []
+    for game, summary, error in results:
+        if summary["overall"] and not error:
+            top = summary.get("top_deck_50")
+            bits.append(f"{game['title']} from {money(summary['overall'][0]['price'])}"
+                        + (f", top deck 50 {money(top[0]['price'])}" if top else ""))
+    subject = title + (": " + " | ".join(bits) if bits else "")
+    return subject, "\n".join(text), "\n".join(html)
 
 
 def gmail_credentials():
@@ -278,31 +317,30 @@ def send(subject, text, html):
 def main():
     dry_run = "--dry-run" in sys.argv
     today = datetime.now(PACIFIC).date()
-    if today > GAME_DAY:
-        print("Game is over; nothing to send.")
+    games = [g for g in GAMES if g["day"] >= today]
+    if not games:
+        print("All games are over; nothing to send.")
         return
-    if "--once-per-day" in sys.argv and any(
-            h["date"] == today.isoformat() and h.get("emailed") for h in load_history()):
+    history = load_history()
+    if "--once-per-day" in sys.argv and today_entry(history, today).get("emailed"):
         print("Today's email already went out; nothing to do.")
         return
 
-    event = find_event()
-    event_url = event.get("seo_url") or FALLBACK_EVENT_URL
-    history = load_history()
-    error = None
-    summary = {"overall": [], "top_deck_50": [], "level300_50": [], "count": 0, "any_qty": {}}
-    try:
-        summary = summarize(get_listings(event["id"]))
-        history = save_history(history, today, summary)
-    except Exception as err:
-        error = type(err).__name__
-        print(f"listings failed: {err}", file=sys.stderr)
+    results = []
+    for game in games:
+        event_id, game["url"] = find_event(game)
+        summary, error = {"overall": [], "count": 0, "any_qty": {}}, None
+        try:
+            summary = summarize(game, get_listings(event_id))
+            record(history, today, game, summary)
+        except Exception as err:
+            error = type(err).__name__
+            print(f"{game['title']} listings failed: {err}", file=sys.stderr)
+        results.append((game, summary, error))
+    write_history(history)
 
-    subject, text, html = render(event_url, summary, history, today, error)
-    if summary["overall"] and not error:
-        cheapest = summary["overall"][0]["price"]
-        top = summary["top_deck_50"][0]["price"] if summary["top_deck_50"] else None
-        subject += f" · from {money(cheapest)}" + (f", top deck 50 {money(top)}" if top else "")
+    subject, text, html = render(results, history, today)
+    print(subject + "\n")
     print(text)
     if dry_run:
         PREVIEW.parent.mkdir(exist_ok=True)
@@ -312,7 +350,8 @@ def main():
             check_login()
     else:
         send(subject, text, html)
-        mark_emailed(today)
+        today_entry(history, today)["emailed"] = True
+        write_history(history)
 
 
 if __name__ == "__main__":

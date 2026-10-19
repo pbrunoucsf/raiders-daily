@@ -30,14 +30,15 @@ python3 -m http.server -d docs    # then open http://localhost:8000
 
 No installs required (macOS/Linux/Windows with Python 3.9+).
 
-## Ticket price email (Raiders @ 49ers, Nov 8 2026)
+## Ticket price email (Raiders games)
 
 `scripts/tickets.py` runs every morning via `.github/workflows/tickets.yml`
-and emails the cheapest seats overall plus the cheapest top-deck seats near
-the 50 (sections 410-413, and 313-316 just below), priced for 2 seats
-together with all fees included (from Gametime's public listings feed). Daily
-lows are kept in `tickets/history.json`. The workflow turns itself off
-after game day.
+and sends one email covering each game in its `GAMES` list that's still
+ahead: currently Rams @ Raiders (Oct 25, Allegiant) and Raiders @ 49ers
+(Nov 8, Levi's). For each game it shows the cheapest seats overall and the
+cheapest top-deck seats near the 50, priced for 2 seats together with all
+fees included (from Gametime's public listings feed). Daily lows are kept in
+`tickets/history.json`. The workflow turns itself off after the last game.
 
 Secrets (Settings → Secrets → Actions): `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
 (a Google app password), `EMAIL_TO` (comma-separated recipients).
