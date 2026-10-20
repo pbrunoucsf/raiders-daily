@@ -165,5 +165,14 @@
    "listings": 293
   },
   "emailed": true
+ },
+ {
+  "date": "2026-10-20",
+  "lv": {
+   "overall": 285.0,
+   "top_deck_50": 290.0,
+   "listings": 296
+  },
+  "emailed": true
  }
 ]
