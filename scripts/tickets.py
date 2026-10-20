@@ -13,7 +13,9 @@ Stdlib only. Config comes from environment variables (GitHub secrets):
 
 Run with --dry-run to skip email and write the message to tickets/preview.html.
 Run with --once-per-day (scheduled runs) to exit quietly if today's email
-already went out, so backup schedule slots never send duplicates.
+already went out, so backup schedule slots never send duplicates. In that
+mode, if any game's prices couldn't be fetched, the email waits for the next
+backup slot instead, unless --last-try is also given (the day's final slot).
 """
 
 import json
@@ -36,6 +38,7 @@ PREVIEW = ROOT / "tickets" / "preview.html"
 PACIFIC = ZoneInfo("America/Los_Angeles")
 TICKET_QTY = 2
 TOP_N = 3
+BETWEEN_GAMES_SECONDS = 45  # Gametime's feed answers 429 to quick back-to-back requests
 
 
 def search_links(q):
@@ -49,34 +52,15 @@ def search_links(q):
     ]
 
 
-# Areas: (history key, heading, set of section names). Section names match
-# Gametime's listing "section" field.
+# Listed in priority order: the first game is fetched first each run (the feed
+# rate-limits bursts) and shown first in the email. Areas: (history key,
+# heading, set of section names); names match Gametime's listing "section" field.
 GAMES = [
-    {
-        "key": "lv",
-        "title": "Rams @ Raiders",
-        "day": date(2026, 10, 25),
-        "when_where": "Sun Oct 25, 2026 · 1:25 PM PT · Allegiant Stadium, Las Vegas",
-        "search": "rams raiders",
-        "match": ("Rams", "Raiders"),
-        "event_id": "695d72d1f3e001f3f409f235",
-        "event_url": ("https://gametime.co/nfl-football/rams-at-raiders-tickets/"
-                      "10-25-2026-las-vegas-nv-allegiant-stadium/events/695d72d1f3e001f3f409f235"),
-        # Allegiant: the 400s are the top deck on both sidelines; the 50 falls at
-        # 412 and 438. Five sections each side ~ between the 30s.
-        "areas": [
-            ("top_deck_50", "Top deck near the 50 (sections 410-414 and 436-440)",
-             {"410", "411", "412", "413", "414", "436", "437", "438", "439", "440"}),
-        ],
-        "links": search_links("rams raiders"),
-    },
     {
         "key": "sf",
         "title": "Raiders @ 49ers",
         "day": date(2026, 11, 8),
         "when_where": "Sun Nov 8, 2026 · 1:05 PM PT · Levi's Stadium, Santa Clara",
-        "search": "raiders 49ers",
-        "match": ("Raiders", "49ers"),
         "event_id": "698f3d2f6316f44ee4d68894",
         "event_url": ("https://gametime.co/nfl-football/raiders-at-49-ers-tickets/"
                       "11-8-2026-santa-clara-ca-levis-stadium/events/698f3d2f6316f44ee4d68894"),
@@ -91,6 +75,22 @@ GAMES = [
         "links": [("TickPick (no fees)", "https://www.tickpick.com/buy-san-francisco-49ers-vs-las-vegas-raiders-tickets-levis-stadium-11-8-26-1pm/7730388/")]
                  + search_links("raiders 49ers")[1:],
     },
+    {
+        "key": "lv",
+        "title": "Rams @ Raiders",
+        "day": date(2026, 10, 25),
+        "when_where": "Sun Oct 25, 2026 · 1:25 PM PT · Allegiant Stadium, Las Vegas",
+        "event_id": "695d72d1f3e001f3f409f235",
+        "event_url": ("https://gametime.co/nfl-football/rams-at-raiders-tickets/"
+                      "10-25-2026-las-vegas-nv-allegiant-stadium/events/695d72d1f3e001f3f409f235"),
+        # Allegiant: the 400s are the top deck on both sidelines; the 50 falls at
+        # 412 and 438. Five sections each side ~ between the 30s.
+        "areas": [
+            ("top_deck_50", "Top deck near the 50 (sections 410-414 and 436-440)",
+             {"410", "411", "412", "413", "414", "436", "437", "438", "439", "440"}),
+        ],
+        "links": search_links("rams raiders"),
+    }
 ]
 
 USER_AGENT = (
@@ -98,9 +98,9 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 )
 
-def fetch_json(url, attempts=4):
+def fetch_json(url, attempts=3):
     """GET JSON, backing off on rate limits / transient errors."""
-    delay = 30
+    delay = 45
     for i in range(attempts):
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
         try:
@@ -112,21 +112,6 @@ def fetch_json(url, attempts=4):
                 raise
             time.sleep(delay)
             delay *= 2
-
-
-def find_event(game):
-    """Locate the game in Gametime search; fall back to the known event id."""
-    url = "https://mobile.gametime.co/v1/search?q=" + urllib.parse.quote(game["search"])
-    try:
-        for item in fetch_json(url, attempts=2).get("events", []):
-            ev = item.get("event", {})
-            name = ev.get("name", "")
-            if (ev.get("datetime_local", "").startswith(game["day"].isoformat())
-                    and all(t in name for t in game["match"]) and "Parking" not in name):
-                return ev["id"], ev.get("seo_url") or game["event_url"]
-    except Exception as err:  # search is a nicety; listings are what matter
-        print(f"search failed, using fallback event id: {err}", file=sys.stderr)
-    return game["event_id"], game["event_url"]
 
 
 def get_listings(event_id):
@@ -327,17 +312,24 @@ def main():
         return
 
     results = []
-    for game in games:
-        event_id, game["url"] = find_event(game)
+    for n, game in enumerate(games):
+        if n:
+            time.sleep(BETWEEN_GAMES_SECONDS)
+        game["url"] = game["event_url"]
         summary, error = {"overall": [], "count": 0, "any_qty": {}}, None
         try:
-            summary = summarize(game, get_listings(event_id))
+            summary = summarize(game, get_listings(game["event_id"]))
             record(history, today, game, summary)
         except Exception as err:
             error = type(err).__name__
             print(f"{game['title']} listings failed: {err}", file=sys.stderr)
         results.append((game, summary, error))
     write_history(history)
+
+    failed = [g["title"] for g, _, err in results if err]
+    if failed and "--once-per-day" in sys.argv and "--last-try" not in sys.argv:
+        print(f"Couldn't fetch {', '.join(failed)}; leaving the email for the next scheduled try.")
+        return
 
     subject, text, html = render(results, history, today)
     print(subject + "\n")

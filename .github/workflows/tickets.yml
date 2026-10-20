@@ -49,6 +49,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_email }}" != "true" ]; then
             python3 scripts/tickets.py --dry-run
+          elif [ "${{ github.event.schedule }}" = "53 21 * * *" ]; then
+            python3 scripts/tickets.py --once-per-day --last-try
           elif [ "${{ github.event_name }}" = "schedule" ]; then
             python3 scripts/tickets.py --once-per-day
           else
