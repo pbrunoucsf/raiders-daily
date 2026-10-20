@@ -170,15 +170,15 @@
   "date": "2026-10-20",
   "lv": {
    "overall": 285.0,
-   "top_deck_50": 290.0,
-   "listings": 296
+   "top_deck_50": 296.0,
+   "listings": 289
   },
   "emailed": true,
   "sf": {
    "overall": 423.0,
    "top_deck_50": 577.0,
    "level300_50": 828.0,
-   "listings": 430
+   "listings": 421
   }
  }
 ]
