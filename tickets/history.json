@@ -173,6 +173,12 @@
    "top_deck_50": 290.0,
    "listings": 296
   },
-  "emailed": true
+  "emailed": true,
+  "sf": {
+   "overall": 423.0,
+   "top_deck_50": 577.0,
+   "level300_50": 828.0,
+   "listings": 430
+  }
  }
 ]
