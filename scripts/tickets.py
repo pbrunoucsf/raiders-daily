@@ -16,6 +16,12 @@ Run with --once-per-day (scheduled runs) to exit quietly if today's email
 already went out, so backup schedule slots never send duplicates. In that
 mode, if any game's prices couldn't be fetched, the email waits for the next
 backup slot instead, unless --last-try is also given (the day's final slot).
+
+Gametime's feed allows roughly one listings request per IP every few minutes,
+so the workflow fetches each game on its own runner:
+  --plan        print a JSON list of game keys that need fetching today
+  --fetch KEY   fetch one game's listings into tickets/raw/KEY.json
+The email step then reads those files (fetching live for any that are missing).
 """
 
 import json
@@ -34,11 +40,12 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parent.parent
 HISTORY = ROOT / "tickets" / "history.json"
 PREVIEW = ROOT / "tickets" / "preview.html"
+RAW_DIR = ROOT / "tickets" / "raw"
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 TICKET_QTY = 2
 TOP_N = 3
-BETWEEN_GAMES_SECONDS = 45  # Gametime's feed answers 429 to quick back-to-back requests
+BETWEEN_GAMES_SECONDS = 45  # only for live fallback fetches; the feed rate-limits per IP
 
 
 def search_links(q):
@@ -299,29 +306,65 @@ def send(subject, text, html):
     print(f"Emailed {len(to)} recipient(s).")
 
 
+def games_due(today):
+    """Games still ahead, or [] if a scheduled run already emailed today."""
+    if "--once-per-day" in sys.argv and today_entry(load_history(), today).get("emailed"):
+        return []
+    return [g for g in GAMES if g["day"] >= today]
+
+
+def fetch_one(key):
+    """Fetch one game's listings into RAW_DIR (one request, for its own runner)."""
+    game = next(g for g in GAMES if g["key"] == key)
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        data = {"listings": get_listings(game["event_id"])}
+        print(f"{game['title']}: {len(data['listings'])} listings")
+    except Exception as err:
+        data = {"error": type(err).__name__}
+        print(f"{game['title']} listings failed: {err}", file=sys.stderr)
+    (RAW_DIR / f"{key}.json").write_text(json.dumps(data))
+
+
+def load_listings(game, live_fetches):
+    """Listings saved by a --fetch run, else fetch live (local runs, or a fetch job that died)."""
+    raw = RAW_DIR / f"{game['key']}.json"
+    if raw.exists():
+        data = json.loads(raw.read_text())
+        if "error" in data:
+            raise RuntimeError(data["error"])
+        return data["listings"]
+    if live_fetches:
+        time.sleep(BETWEEN_GAMES_SECONDS)
+    live_fetches.append(game["key"])
+    return get_listings(game["event_id"])
+
+
 def main():
-    dry_run = "--dry-run" in sys.argv
     today = datetime.now(PACIFIC).date()
-    games = [g for g in GAMES if g["day"] >= today]
-    if not games:
-        print("All games are over; nothing to send.")
+    if "--plan" in sys.argv:
+        print(json.dumps([g["key"] for g in games_due(today)]))
         return
-    history = load_history()
-    if "--once-per-day" in sys.argv and today_entry(history, today).get("emailed"):
-        print("Today's email already went out; nothing to do.")
+    if "--fetch" in sys.argv:
+        fetch_one(sys.argv[sys.argv.index("--fetch") + 1])
         return
 
-    results = []
-    for n, game in enumerate(games):
-        if n:
-            time.sleep(BETWEEN_GAMES_SECONDS)
+    dry_run = "--dry-run" in sys.argv
+    games = games_due(today)
+    if not games:
+        print("Nothing to send (today's email already went out, or all games are over).")
+        return
+
+    history = load_history()
+    results, live_fetches = [], []
+    for game in games:
         game["url"] = game["event_url"]
         summary, error = {"overall": [], "count": 0, "any_qty": {}}, None
         try:
-            summary = summarize(game, get_listings(game["event_id"]))
+            summary = summarize(game, load_listings(game, live_fetches))
             record(history, today, game, summary)
         except Exception as err:
-            error = type(err).__name__
+            error = str(err) if isinstance(err, RuntimeError) else type(err).__name__
             print(f"{game['title']} listings failed: {err}", file=sys.stderr)
         results.append((game, summary, error))
     write_history(history)

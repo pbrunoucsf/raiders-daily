@@ -23,42 +23,74 @@ permissions:
   contents: write
   actions: write
 
+env:
+  # Scheduled runs send at most once a day; the last slot sends even if a game failed.
+  FLAGS: >-
+    ${{ github.event_name == 'schedule' && '--once-per-day' || '' }}
+    ${{ github.event.schedule == '53 21 * * *' && '--last-try' || '' }}
+    ${{ github.event_name == 'workflow_dispatch' && !inputs.send_email && '--dry-run' || '' }}
+
 jobs:
-  email:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      games: ${{ steps.plan.outputs.games }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Stop for good after game day (Nov 8, 2026)
-        id: done
+      - name: Stop for good after the last game (Nov 8, 2026)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$(TZ=America/Los_Angeles date +%Y%m%d)" -gt 20261108 ]; then
-            echo "Game is over; disabling this workflow."
+            echo "Games are over; disabling this workflow."
             gh workflow disable tickets.yml --repo "$GITHUB_REPOSITORY"
-            echo "over=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check prices and email (stdlib only, no installs)
-        if: steps.done.outputs.over != 'true'
+      - name: Which games need prices today
+        id: plan
+        run: echo "games=$(python3 scripts/tickets.py --plan $FLAGS)" >> "$GITHUB_OUTPUT"
+
+  # Gametime's feed rate-limits per IP, so each game is fetched on its own runner.
+  fetch:
+    needs: plan
+    if: needs.plan.outputs.games != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        game: ${{ fromJSON(needs.plan.outputs.games) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/tickets.py --fetch ${{ matrix.game }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raw-${{ matrix.game }}
+          path: tickets/raw/
+          retention-days: 1
+
+  email:
+    needs: [plan, fetch]
+    if: always() && needs.plan.outputs.games != '[]' && needs.plan.outputs.games != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: raw-*
+          path: tickets/raw/
+          merge-multiple: true
+
+      - name: Build and send the email (stdlib only, no installs)
         env:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_email }}" != "true" ]; then
-            python3 scripts/tickets.py --dry-run
-          elif [ "${{ github.event.schedule }}" = "53 21 * * *" ]; then
-            python3 scripts/tickets.py --once-per-day --last-try
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            python3 scripts/tickets.py --once-per-day
-          else
-            python3 scripts/tickets.py
-          fi
+        run: python3 scripts/tickets.py $FLAGS
 
       - name: Save price history
-        if: steps.done.outputs.over != 'true'
         run: |
           git config user.name "raiders-daily-bot"
           git config user.email "actions@users.noreply.github.com"
