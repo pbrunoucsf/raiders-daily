@@ -285,5 +285,15 @@
    "listings": 400
   },
   "emailed": true
+ },
+ {
+  "date": "2026-10-29",
+  "sf": {
+   "overall": 401.0,
+   "top_deck_50": 453.0,
+   "level300_50": 625.0,
+   "listings": 399
+  },
+  "emailed": true
  }
 ]
