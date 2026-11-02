@@ -325,5 +325,15 @@
    "listings": 416
   },
   "emailed": true
+ },
+ {
+  "date": "2026-11-02",
+  "sf": {
+   "overall": 394.0,
+   "top_deck_50": null,
+   "level300_50": 563.0,
+   "listings": 405
+  },
+  "emailed": true
  }
 ]
